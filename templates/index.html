@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chess Game</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+
+        /* Wrapper grid: left numbers and bottom letters */
+        .board-wrapper {
+            display: grid;
+            grid-template-columns: 20px repeat(8, 40px);
+            grid-template-rows: repeat(8, 40px) 20px;
+            width: 340px;
+            margin: 40px auto;
+        }
+        .label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #333;
+            user-select: none;
+        }
+        .rank-label { grid-column: 1; }
+        .corner { }
+
+        .chessboard {
+            display: grid;
+            grid-template-columns: repeat(8, 40px);
+            grid-template-rows: repeat(8, 40px);
+            gap: 0;
+            border: 2px solid #333;
+            width: 320px;
+            margin: 0;
+            grid-column: 2 / span 8;
+            grid-row: 1 / span 8;
+        }
+        .square {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        .white { background: #f0d9b5; }
+        .black { background: #b58863; }
+
+        .piece {
+            width: 40px;
+            height: 40px;
+            background-image: url("{{ url_for('static', filename='Chess_Pieces_Sprite.svg') }}");
+            background-repeat: no-repeat;
+            background-size: 240px 80px;
+        }
+        .wK { background-position: 0 0; }
+        .wQ { background-position: -40px 0; }
+        .wB { background-position: -80px 0; }
+        .wN { background-position: -120px 0; }
+        .wR { background-position: -160px 0; }
+        .wP { background-position: -200px 0; }
+        .bK { background-position: 0 -40px; }
+        .bQ { background-position: -40px -40px; }
+        .bB { background-position: -80px -40px; }
+        .bN { background-position: -120px -40px; }
+        .bR { background-position: -160px -40px; }
+        .bP { background-position: -200px -40px; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center;">Chess Game</h1>
+    <div class="board-wrapper">
+        {% for row in range(8) %}
+            <div class="label rank-label">{{ 8 - row }}</div>
+        {% endfor %}
+
+        <div class="chessboard">
+            {% for row in range(8) %}
+                {% for col in range(8) %}
+                    <div class="square {{ 'white' if (row+col)%2==0 else 'black' }}">
+                        {% if board[row][col] != '0' %}
+                            <div class="piece {{ board[row][col] }}"></div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+
+        <div class="corner"></div>
+        {% set files = 'abcdefgh' %}
+        {% for col in range(8) %}
+            <div class="label file-label">{{ files[col] }}</div>
+        {% endfor %}
+    </div>
+
+    <form method="post" style="text-align:center; margin-top:20px;">
+        <label for="move">Enter your move (e.g. P,e2,e4): </label>
+        <input type="text" id="move" name="move" required>
+        <button type="submit">Submit Move</button>
+    </form>
+    <p style="text-align:center; font-weight:bold; color:red;">{{ message }}</p>
+    <p style="text-align:center;">Current player: <b>{{ current_player }}</b></p>
+
+    {% if message and message.startswith('Checkmate!') %}
+    <div style="text-align:center; margin-top:10px;">
+        <form method="post" action="{{ url_for('reset') }}" onsubmit="event.preventDefault(); fetch('{{ url_for('reset') }}', {method: 'POST'}).then(()=>window.location.reload());">
+            <button type="submit">Restart</button>
+        </form>
+    </div>
+    {% endif %}
+</body>
+</html>

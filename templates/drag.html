@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Chess (Drag & Drop)</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .board-wrapper {
+            display: grid;
+            grid-template-columns: 20px repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px) 20px;
+            width: 500px;
+            margin: 30px auto;
+            gap: 0;
+            position: relative;
+        }
+        .label { display:flex; align-items:center; justify-content:center; font-size:12px; color:#333; user-select:none; }
+        .chessboard { grid-column: 2 / span 8; grid-row: 1 / span 8; display:grid; grid-template-columns: repeat(8, 60px); grid-template-rows: repeat(8, 60px); border:2px solid #333; }
+        .square { width:60px; height:60px; display:flex; align-items:center; justify-content:center; }
+        .white { background:#f0d9b5; }
+        .black { background:#b58863; }
+        .piece { width:60px; height:60px; background-image:url("{{ url_for('static', filename='Chess_Pieces_Sprite.svg') }}"); background-repeat:no-repeat; background-size: 360px 120px; cursor: grab; }
+        .dragging { opacity: 0.6; }
+        .wK { background-position: 0 0; }
+        .wQ { background-position: -60px 0; }
+        .wB { background-position: -120px 0; }
+        .wN { background-position: -180px 0; }
+        .wR { background-position: -240px 0; }
+        .wP { background-position: -300px 0; }
+        .bK { background-position: 0 -60px; }
+        .bQ { background-position: -60px -60px; }
+        .bB { background-position: -120px -60px; }
+        .bN { background-position: -180px -60px; }
+        .bR { background-position: -240px -60px; }
+        .bP { background-position: -300px -60px; }
+        .overlay { position:absolute; inset:0; background: rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; }
+        .overlay .modal { background:#fff; padding:20px 24px; border-radius:8px; text-align:center; width: 280px; }
+        .btn { background:#2b6cb0; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
+        .btn:disabled { opacity: 0.6; cursor: default; }
+    </style>
+</head>
+<body>
+    <h2 style="text-align:center;">Drag & Drop Chess</h2>
+    <p style="text-align:center;">Current player: <b id="currentPlayer">{{ current_player }}</b></p>
+    <div class="board-wrapper" id="boardWrapper">
+        {% for row in range(8) %}
+            <div class="label">{{ 8 - row }}</div>
+        {% endfor %}
+        <div class="chessboard" id="board">
+            {% for row in range(8) %}
+                {% for col in range(8) %}
+                    <div class="square {{ 'white' if (row+col)%2==0 else 'black' }}" data-row="{{ row }}" data-col="{{ col }}"></div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+        <div class="label"></div>
+        {% set files = 'abcdefgh' %}
+        {% for col in range(8) %}
+            <div class="label">{{ files[col] }}</div>
+        {% endfor %}
+        <div class="overlay" id="overlay">
+            <div class="modal">
+                <h3 id="winText">Checkmate!</h3>
+                <button class="btn" id="restartBtn">Restart</button>
+            </div>
+        </div>
+    </div>
+    <p style="text-align:center; color:red; font-weight:bold;" id="message"></p>
+
+    <script>
+        const boardEl = document.getElementById('board');
+        const messageEl = document.getElementById('message');
+        const currentPlayerEl = document.getElementById('currentPlayer');
+        const overlayEl = document.getElementById('overlay');
+        const winTextEl = document.getElementById('winText');
+        const restartBtn = document.getElementById('restartBtn');
+        const files = 'abcdefgh';
+        let gameOver = false;
+
+        function coordsToAlgebraic(row, col) {
+            const file = files[col];
+            const rank = 8 - row;
+            return file + String(rank);
+        }
+
+        function render(board) {
+            for (const square of boardEl.children) square.innerHTML = '';
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const idx = row * 8 + col;
+                    const square = boardEl.children[idx];
+                    const sprite = board[row][col];
+                    if (sprite !== '0') {
+                        const piece = document.createElement('div');
+                        piece.className = `piece ${sprite}`;
+                        piece.draggable = !gameOver;
+                        piece.dataset.row = row;
+                        piece.dataset.col = col;
+                        square.appendChild(piece);
+                    }
+                }
+            }
+        }
+
+        function installDnD() {
+            let dragging = null;
+            boardEl.addEventListener('dragstart', (e) => {
+                if (gameOver) { e.preventDefault(); return; }
+                const target = e.target.closest('.piece');
+                if (!target) return;
+                dragging = target;
+                dragging.classList.add('dragging');
+                e.dataTransfer.setData('text/plain', JSON.stringify({ row: +target.dataset.row, col: +target.dataset.col }));
+            });
+            boardEl.addEventListener('dragend', () => {
+                if (dragging) dragging.classList.remove('dragging');
+                dragging = null;
+            });
+            boardEl.addEventListener('dragover', (e) => { e.preventDefault(); });
+            boardEl.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                if (gameOver) return;
+                const square = e.target.closest('.square');
+                if (!square) return;
+                const payload = e.dataTransfer.getData('text/plain');
+                if (!payload) return;
+                const { row: sRow, col: sCol } = JSON.parse(payload);
+                const tRow = +square.dataset.row;
+                const tCol = +square.dataset.col;
+                const from = coordsToAlgebraic(sRow, sCol);
+                const to = coordsToAlgebraic(tRow, tCol);
+
+                try {
+                    const res = await fetch('{{ url_for('api_move') }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ from, to })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        messageEl.textContent = data.message || data.error || 'Illegal move';
+                    } else {
+                        messageEl.textContent = data.message === 'OK' ? '' : data.message;
+                        currentPlayerEl.textContent = data.current_player;
+                        render(data.board);
+                        if (data.checkmate) {
+                            gameOver = true;
+                            winTextEl.textContent = data.message;
+                            overlayEl.style.display = 'flex';
+                        }
+                    }
+                } catch (err) {
+                    messageEl.textContent = 'Network error';
+                }
+            });
+        }
+
+        restartBtn.addEventListener('click', async () => {
+            restartBtn.disabled = true;
+            try {
+                const res = await fetch('{{ url_for('reset') }}', { method: 'POST' });
+                const data = await res.json();
+                gameOver = false;
+                overlayEl.style.display = 'none';
+                messageEl.textContent = '';
+                currentPlayerEl.textContent = data.current_player;
+                render(data.board);
+            } finally {
+                restartBtn.disabled = false;
+            }
+        });
+
+        const initialBoard = {{ board|tojson }};
+        render(initialBoard);
+        installDnD();
+    </script>
+</body>
+</html>
